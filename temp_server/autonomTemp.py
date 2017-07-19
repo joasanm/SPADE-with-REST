@@ -74,7 +74,7 @@ class restRequest(spade.Behaviour.OneShotBehaviour):
         except requests.exceptions.RequestException as e:
             print self.myAgent.getAID().getName() + ": ERROR, connection refused"
             print e
-            result = content + "-ERROR-0"
+            result = content + "-404-0"
         msg2 = spade.ACLMessage.ACLMessage()
         msg2.setPerformative("city")
         msg2.addReceiver(spade.AID.aid(aid, ["xmpp://"+aid]))
@@ -137,7 +137,7 @@ class autonom(spade.Agent.Agent):
 #behaviour that get the temperature from diferents cities
 class averageTemp(spade.Behaviour.TimeOutBehaviour):
     def onStart(self):
-        print "waiting local temperatures"
+        print "waiting city temperatures"
 
     def timeOut(self):
         print "waiting time finished"

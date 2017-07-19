@@ -66,12 +66,12 @@ class restRequest(spade.Behaviour.OneShotBehaviour):
                 if len(content) == 2 and content[1] == "average":
                     r = requests.get("http://"+rmh+"/"+content[1], timeout=12)
                     result = str(r.status_code) + "-" + r.text
-                else:
-                    r = requests.get("http://"+rmh+"/", timeout=12)
-                    result = str(r.status_code) + "-" + r.text
-            elif content[0] == "OPTIONS":
-                r = requests.options("http://"+rmh+"/", timeout=12)
-                result = str(r.status_code) + "-" + r.text
+                #else:
+                    #r = requests.get("http://"+rmh+"/", timeout=12)
+                    #result = str(r.status_code) + "-" + r.text
+            #elif content[0] == "OPTIONS":
+                #r = requests.options("http://"+rmh+"/", timeout=12)
+                #result = str(r.status_code) + "-" + r.text
         except requests.exceptions.RequestException as e:
             print self.myAgent.getAID().getName() + ": ERROR, connection refused"
             print e
@@ -111,7 +111,7 @@ class reprActions(spade.Behaviour.Behaviour):
             msg2.setContent(req)
             startRestRequest(aid)
         elif content[0] == "requestInformation":
-            msg2.setPerformative("country")
+            msg2.setPerformative("response")
             msg2.addReceiver(spade.AID.aid("country@"+spadeHost, ["xmpp://country@"+spadeHost]))
             msg2.setContent(content[1]+"-"+content[2])
         self.myAgent.send(msg2)
@@ -137,6 +137,43 @@ class countryRepr(spade.Agent.Agent):
         res = self.registerService(dad)
         print aid.getName() + ": service registered -> " + str(res)
 
+#behaviour that get the temperature from diferents autonomies
+class averageTemp(spade.Behaviour.TimeOutBehaviour):
+    def onStart(self):
+        print "waiting autonomy temperatures"
+
+    def timeOut(self):
+        print "waiting time finished"
+        temps = 0
+        avg = 0
+        res = 0
+        for x in range(len(autonomy_list)):
+            msg = self._receive(False)
+            if msg:
+                content = msg.getContent().split("-")
+                if content[0] == "200":
+                    temps += float(content[1])
+                    avg += 1
+        print "msgs received correctly: " + str(avg)
+        try:
+            res = float("{0:.2f}".format(temps/avg))
+        except ZeroDivisionError:
+            res = 0
+
+        print res
+
+#variable that represents an instance of the previous behaviour
+pl = averageTemp(15)
+
+#method that add the previous behaviour to city agent
+def startAverageTemp():
+    pl = averageTemp(15)
+    template = spade.Behaviour.ACLTemplate()
+    template.setPerformative("response")
+    t = spade.Behaviour.MessageTemplate(template)
+    au.addBehaviour(pl, t)
+    print "averageTemp Behaviour started"
+
 #behaviour that send to each autonomy representant the request to make
 class countryActions(spade.Behaviour.OneShotBehaviour):
     def _process(self):
@@ -149,14 +186,15 @@ class countryActions(spade.Behaviour.OneShotBehaviour):
                 else:
                     print "ERROR: invalid GET argument"
             else:
-                print "OBJETIVE: get information about remote platform services"
-                req = "GET"
-        elif request[0]=="OPTIONS":
-            print "OBJETIVE: get information about API"
-            req = "OPTIONS"
+                print "OBJETIVE: get information about platform services"
+                req = "GETED"
 
         if req == "":
             print "invalid request"
+        elif req == "GETED":
+            dad = spade.DF.DfAgentDescription()
+            search=self.myAgent.searchService(dad)
+            print search
         else:
             msg = spade.ACLMessage.ACLMessage()
             msg.setPerformative("autonomy")
@@ -164,11 +202,7 @@ class countryActions(spade.Behaviour.OneShotBehaviour):
                 msg.addReceiver(spade.AID.aid(i["aid"], ["xmpp://"+i["aid"]]))
             msg.setContent("makeRequest-" + req)
             self.myAgent.send(msg)
-
-            msg2 = self._receive(block=True)
-            content = msg2.getContent().split("-")
-            print "HTTP code: " + content[0]
-            print content[1]
+            startAverageTemp()
 
 
 #-----------------------------------------------------------------------
