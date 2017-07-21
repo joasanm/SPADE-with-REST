@@ -1,5 +1,5 @@
 #!flask/bin/python
-from flask import Flask, abort, request, jsonify
+from flask import Flask, abort, request
 import spade
 import sys
 import time
@@ -20,12 +20,6 @@ cityHospitals = []
 
 #time that can wait a client connection are defined in the timeout variable
 timeout=5
-
-#patient list. Each patient has the next properties: organ type, critical state, hospital & transplant authorization
-#patients = []
-
-#donor organs list. Each organ has the next properties: organ type, ...
-#donor_organs = []
 
 #variable with the Rest system to use
 app = Flask(__name__)
@@ -75,8 +69,6 @@ class wrapperActions(spade.Behaviour.Behaviour):
                 res = "ERROR, invalid organ type"
             elif "critical_state" not in content or content["critical_state"] not in range(1,11):
                 res = "ERROR, invalid critical state value"
-            elif "hospital" not in content:
-                res = "ERROR, hospital required"
             elif "transplant_authorization" not in content or content["transplant_authorization"] not in range(2):
                 res = "ERROR, invalid transplant authorization value"
             else:
@@ -84,7 +76,7 @@ class wrapperActions(spade.Behaviour.Behaviour):
                 patient["id"] = content["id"]
                 patient["organ_type"] = content["organ_type"]
                 patient["critical_state"] = content["critical_state"]
-                patient["hospital"] = content["hospital"]
+                patient["hospital"] = hospital
                 patient["transplant_authorization"] = content["transplant_authorization"]
                 self.myAgent.patientsDB.append(patient)
                 res = "DB updated"
@@ -129,15 +121,14 @@ class interface(spade.Agent.Agent):
 class interfaceActions(spade.Behaviour.OneShotBehaviour):
     def _process(self):
         aid = self.myAgent.getAID().getName()
-        content = {"id":123, "organ_type":"heart", "critical_state":5, "hospital":"Barcelona", "transplant_authorization":1}
+        content = {"id":123, "organ_type":"heart", "critical_state":5, "transplant_authorization":1}
         msg = spade.ACLMessage.ACLMessage()
         msg.setPerformative("wrapper")
         msg.addReceiver(spade.AID.aid("wrapper@"+spadeHost, ["xmpp://wrapper@" + spadeHost]))
         msg.setContent("interface-0-" + json.dumps(content))
         self.myAgent.send(msg)
 
-        time.sleep(1)
-        content = {"id":124, "organ_type":"lung", "critical_state":3, "hospital":"Barcelona", "transplant_authorization":1}
+        content = {"id":124, "organ_type":"lung", "critical_state":3, "transplant_authorization":1}
         msg.setContent("interface-0-" + json.dumps(content))
         self.myAgent.send(msg)
 
@@ -149,7 +140,7 @@ class interfacePrint(spade.Behaviour.Behaviour):
         if content[1] == "GET_Wrapper":
             print aid + ": " + content[2]
         elif content[1] == "GET_CoordinatorPatients":
-            print aid + ": " + Content[0] + " -> " + content[2]
+            print aid + ": " + content[0] + " -> " + content[2]
         elif content[1] == "GET_CoordinatorError":
             print aid + ": " + content[2]
         elif content[1] == "GET_CoordinatorReceptor":
@@ -185,7 +176,7 @@ class interfaceInput(spade.Behaviour.Behaviour):
 class transplantCoordinator(spade.Agent.Agent):
     def _setup(self):
         self.layers = {0 : "0Emergency", 1 : "hospital", 2 : "city", 3 : "region", 4 : "zone", 5 : "country"}
-        self.requestLayer = 3
+        self.requestLayer = 0
         self.organ = {}
         self.patients = []
         self.pReceptor = {}
@@ -249,30 +240,44 @@ class coordinatorActions(spade.Behaviour.Behaviour):
                 msg2.setContent("0-New_Search")
             else:
                 #PROTOCOL SMART
+                print "PROTOCOL"
                 self.myAgent.pReceptor = self.myAgent.patients[random.randint(0, len(self.myAgent.patients)-1)]
-                res = "Posible receptor: " + self.myAgent.pReceptor
+                res = "Posible receptor: " + json.dumps(self.myAgent.pReceptor)
                 msg3 = spade.ACLMessage.ACLMessage()
                 msg3.setPerformative("interface")
                 msg3.addReceiver(spade.AID.aid("interface@"+spadeHost, ["xmpp://interface@"+spadeHost]))
                 msg3.setContent("0-GET_CoordinatorError-" + res)
-
-                msg2.setPerformative("request")
-                msg2.addReceiver(spade.AID.aid("rest@"+spadeHost, ["xmpp://rest@"+spadeHost]))
-                msg2.setContent("GET_hospitalConfirmation-" + json.dumps(self.myAgent.pReceptor))
+                if self.myAgent.requestLayer == 1:
+                    msg2.setPerformative("coordinator")
+                    msg2.addReceiver(spade.AID.aid("coordinator@"+spadeHost, ["xmpp://coordinator@"+spadeHost]))
+                    msg2.setContent("2-GET_Response-" + str(random.randint(0,1)))
+                else:
+                    msg2.setPerformative("request")
+                    msg2.addReceiver(spade.AID.aid("rest@"+spadeHost, ["xmpp://rest@"+spadeHost]))
+                    msg2.setContent("GET_hospitalConfirmation-" + json.dumps(self.myAgent.pReceptor))
         elif content[1] == "GET_Response":
             if content[0] == "0":
                 msg2.setPerformative("interface")
                 msg2.addReceiver(spade.AID.aid("interface@"+spadeHost, ["xmpp://interface@"+spadeHost]))
                 msg2.setContent("0-GET_CoordinatorError-" + content[2])
+                self.myAgent.requestLayer = 0
+                self.myAgent.pReceptor = {}
+                self.myAgent.patients = []
+                self.myAgent.cityPatients = {}
                 inter.input = 1
             elif content[0] == "1":
                 self.myAgent.patients = json.loads(content[2])
+                print str(self.myAgent.patients)
                 msg2.setPerformative("coordinator")
                 msg2.addReceiver(spade.AID.aid("coordinator@"+spadeHost, ["xmpp://coordinator@"+spadeHost]))
                 msg2.setContent("0-SMART_Protocol")
             elif content[0] == "2":
                 if content[2] == "1":
-                    print "RECEPTOR ACEPTAT -> " + self.myAgent.pReceptor
+                    print "RECEPTOR ACEPTAT -> " + str(self.myAgent.pReceptor)
+                    self.myAgent.requestLayer = 0
+                    self.myAgent.pReceptor = {}
+                    self.myAgent.patients = []
+                    self.myAgent.cityPatients = {}
                     inter.input = 1
                     #REDIRIGIR RESPOSTA A INTERFICIE
                 else:
@@ -291,6 +296,10 @@ class coordinatorActions(spade.Behaviour.Behaviour):
                 msg2.setPerformative("interface")
                 msg2.addReceiver(spade.AID.aid("interface@"+spadeHost, ["xmpp://interface@"+spadeHost]))
                 msg2.setContent("0-GET_CoordinatorError-There are not compatible receptors")
+                self.myAgent.requestLayer = 0
+                self.myAgent.pReceptor = {}
+                self.myAgent.patients = []
+                self.myAgent.cityPatients = {}
                 inter.input = 1
             elif self.myAgent.layers[self.myAgent.requestLayer] == "hospital":
                 msg3 = spade.ACLMessage.ACLMessage()
@@ -301,7 +310,22 @@ class coordinatorActions(spade.Behaviour.Behaviour):
 
                 msg2.setPerformative("wrapper")
                 msg2.addReceiver(spade.AID.aid("wrapper@"+spadeHost, ["xmpp://wrapper@"+spadeHost]))
-                msg2.setContent("coordinator-H-GET_Filtered-" + self.myAgent.organ)
+                msg2.setContent("coordinator-H-GET_Filtered-" + json.dumps(self.myAgent.organ))
+            elif self.myAgent.layers[self.myAgent.requestLayer] == "city":
+                if len(cityHospitals) > 0:
+                    msg3 = spade.ACLMessage.ACLMessage()
+                    msg3.setPerformative("interface")
+                    msg3.addReceiver(spade.AID.aid("interface@"+spadeHost, ["xmpp://interface@"+spadeHost]))
+                    msg3.setContent(self.myAgent.layers[self.myAgent.requestLayer] + "-GET_CoordinatorReceptor")
+                    self.myAgent.send(msg3)
+
+                    msg2.setPerformative("request")
+                    msg2.addReceiver(spade.AID.aid("rest@"+spadeHost, ["xmpp://rest@"+spadeHost]))
+                    msg2.setContent(self.myAgent.layers[self.myAgent.requestLayer] + "-" + json.dumps(self.myAgent.organ))
+                else:
+                    msg2.setPerformative("coordinator")
+                    msg2.addReceiver(spade.AID.aid("coordinator@"+spadeHost, ["xmpp://coordinator@"+spadeHost]))
+                    msg2.setContent("0-New_Search")
             else:
                 msg3 = spade.ACLMessage.ACLMessage()
                 msg3.setPerformative("interface")
@@ -311,7 +335,7 @@ class coordinatorActions(spade.Behaviour.Behaviour):
 
                 msg2.setPerformative("request")
                 msg2.addReceiver(spade.AID.aid("rest@"+spadeHost, ["xmpp://rest@"+spadeHost]))
-                msg2.setContent(self.myAgent.layers[self.myAgent.requestLayer] + "-" + self.myAgent.organ)
+                msg2.setContent(self.myAgent.layers[self.myAgent.requestLayer] + "-" + json.dumps(self.myAgent.organ))
         self.myAgent.send(msg2)
 
 
@@ -333,11 +357,13 @@ class makeRequest(spade.Behaviour.Behaviour):
         msg = self._receive(block=True)
         content = msg.getContent().split("-")
         c = 1
+        status = "404/408"
         result = "invalid request body"
         try:
             if content[0] == "0Emergency":
                 r = requests.get("http://"+remoteHost+"/"+hospital+"/0Emergency", data=content[1])
-                result = r.text
+                result = "{}"#r.text
+                status = "200"#str(r.status_code)
             elif content[0] == "city":
                 cPatients = []
                 for i in cityHospitals:
@@ -345,45 +371,59 @@ class makeRequest(spade.Behaviour.Behaviour):
                         r = requests.get("http://"+i["remoteHost"]+"/patients", data=content[1])
                         cPatients += json.loads(r.text)
                         tc.cityPatients[i["hospital"]] = json.loads(r.text)
+                        status = str(r.status_code)
                     except requests.exceptions.RequestException:
                         print "ERROR: Connection refused with " + i["hospital"]
                 result = json.dumps(cPatients)
             elif content[0] == "region":
-                r = requests.get("http://"+remoteHost+"/"+hospital+"/region", data=content[1]) #timeout = 10)
+                r = requests.get("http://"+remoteHost+"/"+hospital+"/region", data=content[1], timeout = 10)
                 result = r.text
+                status = str(r.status_code)
             elif content[0] == "zone":
-                r = requests.get("http://"+remoteHost+"/"+hospital+"/zone", data=content[1])
+                r = requests.get("http://"+remoteHost+"/"+hospital+"/zone", data=content[1], timeout = 10)
                 result = r.text
+                status = str(r.status_code)
             elif content[0] == "country":
                 r = requests.get("http://"+remoteHost+"/"+hospital+"/country", data=content[1])
                 result = r.text
+                status = str(r.status_code)
             elif content[0] == "PUT_HA":
                 r = requests.put("http://"+remoteHost+"/"+hospital+"/hAgent", data=content[1])
                 result = r.text
+                status = str(r.status_code)
                 c = 3
             elif content[0] == "POST_EC":
                 r = requests.post("http://"+remoteHost+"/"+hospital+"/ecAgent", data=content[1])
                 result = r.text
+                status = str(r.status_code)
                 c = 4
             elif content[0] == "GET_hospitalConfirmation":
-                cityReceptor = False
-                for i in cityHospitals:
-                    if json.loads(content[1]) in tc.cityPatients[i["hospital"]]:
-                        r = requests.get("http://"+i["remoteHost"]+"/confirmation", data=content[1])
-                        result = r.text
-                        cityReceptor = True
-                if not cityReceptor:
-                    r = requests.get("http://"+remoteHost+"/"+hospital+"/region/confirmation", data=content[1])
+                if tc.requestLayer == 0:
+                    r = requests.get("http://"+remoteHost+"/"+hospital+"/0Emergency/confirmation", data=content[1])
                     result = r.text
+                    status = str(r.status_code)
+                elif tc.requestLayer == 2:
+                    for i in cityHospitals:
+                        if json.loads(content[1]) in tc.cityPatients[i["hospital"]]:
+                            r = requests.get("http://"+i["remoteHost"]+"/confirmation", data=content[1])
+                            result = r.text
+                            status = str(r.status_code)
+                else:
+                    r = requests.get("http://"+remoteHost+"/"+hospital+"/region/confirmation", data=content[1], timeout = 10)
+                    result = r.text
+                    status = str(r.status_code)
                 c = 2
-                pass
         except requests.exceptions.RequestException:
-            result = "REQUEST ERROR -> connection refused"
+            result = "ERROR 404 (connectionRefused)"
+        except requests.exceptions.Timeout:
+            result = "ERROR 408 (timeOutReached)"
+        if status != "200" or "ERROR" in result:
             c = 0
         msg = spade.ACLMessage.ACLMessage()
         msg.setPerformative("coordinator")
         msg.addReceiver(spade.AID.aid("coordinator@"+spadeHost, ["xmpp://coordinator@"+spadeHost]))
         msg.setContent(str(c) + "-GET_Response-" + result)
+        print "c: " + str(c)
         self.myAgent.send(msg)
 
 #behaviour to receive messages from agents of the same platform
@@ -392,7 +432,7 @@ class petitionCompleted(spade.Behaviour.Behaviour):
         msg = self._receive(block=True)
         content = msg.getContent().split("-")
         pid = int(content[0])
-        self.myAgent.petitions[pid][3] = content[1]
+        self.myAgent.petitions[pid][2] = content[1]
         self.myAgent.petitions[pid][0] = 2
 
 #behaviour with the action that Rest agent can do, depending on the request to resolve
@@ -414,10 +454,10 @@ class restBehav(spade.Behaviour.Behaviour):
                         msg = spade.ACLMessage.ACLMessage()
                         msg.setPerformative("coordinator")
                         msg.addReceiver(spade.AID.aid("coordinator@"+spadeHost, ["xmpp://coordinator@"+spadeHost]))
-                        msg.setContent(str(k) + "-SEND_Patients-" + self.myAgent.petitions[k][2])
+                        msg.setContent(str(k) + "-SEND_Patients-" + self.myAgent.petitions[k][3])
                         self.myAgent.send(msg)
                     elif self.myAgent.petitions[k][1]=="GET_confirmation":
-                        self.myAgent.petitions[k][3] = str(random.randint(0,1))
+                        self.myAgent.petitions[k][2] = str(random.randint(0,1))
                         self.myAgent.petitions[k][0] = 2
                         #CORREGIR CONFIRMACIO
 
@@ -468,14 +508,14 @@ def information():
 def getPatients():
     idp=rest.id
     rest.id+=1
-    rest.petitions[idp]=[0,"GET_patients", request.data, ""]
+    rest.petitions[idp]=[0,"GET_patients", "", request.data]
     endtime=time.time()+timeout
     remaining=endtime-time.time()
     while rest.petitions[idp][0]!=2 and remaining>0.0:
         time.sleep(1)
         remaining=endtime-time.time()
     if rest.petitions[idp][0]==2:
-        res=rest.petitions[idp][3]
+        res=rest.petitions[idp][2]
         del rest.petitions[idp]
         return str(res)
     else:
@@ -488,14 +528,14 @@ def getPatients():
 def getConfirmation():
     idp=rest.id
     rest.id+=1
-    rest.petitions[idp]=[0,"GET_confirmation", request.data, ""]
+    rest.petitions[idp]=[0,"GET_confirmation", "", request.data]
     endtime=time.time()+timeout
     remaining=endtime-time.time()
     while rest.petitions[idp][0]!=2 and remaining>0.0:
         time.sleep(1)
         remaining=endtime-time.time()
     if rest.petitions[idp][0]==2:
-        res=rest.petitions[idp][3]
+        res=rest.petitions[idp][2]
         del rest.petitions[idp]
         return str(res)
     else:
@@ -541,6 +581,9 @@ if __name__ == "__main__":
                 ch.append(sys.argv[x].lower())
             elif arg == "cityHosts":
                 crh.append(sys.argv[x])
+
+    ch = list(set(ch))
+    crh = list(set(crh))
 
     if spadeHost == "" or restHost == "" or remoteHost == "" or hospital == "":
         print "Require next arguments: -h hospital -s Spade_host -r rest_host -u region_host"
