@@ -31,6 +31,7 @@ app = Flask(__name__)
 #-----------------------------------------------------------------------
 
 
+#agent that represents a zone
 class zoneRepr(spade.Agent.Agent):
     def _setup(self):
         aid = self.getAID()
@@ -46,6 +47,7 @@ class zoneRepr(spade.Agent.Agent):
         res = self.registerService(dad)
         print aid.getName() + ": service registered -> " + str(res)
 
+#method to make external petitions
 class restRequest(spade.Behaviour.OneShotBehaviour):
     def _process(self):
         msg = self._receive(block=True)
@@ -60,10 +62,10 @@ class restRequest(spade.Behaviour.OneShotBehaviour):
         result = ""
         try:
             if content[0] == "getPL":
-                r = requests.get("http://"+rmh+"/patients", data = content[2], timeout = 33) #COMPLETAR/COMPROBAR
+                r = requests.get("http://"+rmh+"/patients", data = content[2], timeout = 11)
                 result = str(r.status_code) + "-" + content[1] + "-" + r.text
             elif content[0] == "getZC" or content[0] == "getECC":
-                r = requests.get("http://"+rmh+"/confirmation", data = content[2], timeout = 33) #COMPLETAR/COMPROBAR
+                r = requests.get("http://"+rmh+"/confirmation", data = content[2], timeout = 11)
                 result = str(r.status_code) + "-" + content[1] + "-" + r.text
         except requests.exceptions.RequestException:
             print self.myAgent.getAID().getName() + ": ERROR, connection refused"
@@ -81,8 +83,10 @@ class restRequest(spade.Behaviour.OneShotBehaviour):
             msg2.setContent("requestInformation-" + content[0] + "-" + result)
         self.myAgent.send(msg2)
 
+#variable with an instance of make petitions
 rr = restRequest()
 
+#method to create an instance of making petitions
 def startRestRequest(sender):
     rr = restRequest()
     template = spade.Behaviour.ACLTemplate()
@@ -91,6 +95,7 @@ def startRestRequest(sender):
     rest.addBehaviour(rr, t)
     print "restRequest Behaviour started"
 
+#actions that can do a region representant agent
 class reprActions(spade.Behaviour.Behaviour):
     def _process(self):
         msg = self._receive(block=True)
@@ -147,6 +152,7 @@ class reprActions(spade.Behaviour.Behaviour):
             startRestRequest(aid)
         self.myAgent.send(msg2)
 
+#behaviour to register an agent in AMS
 class AMS(spade.Behaviour.OneShotBehaviour):
     def _process(self):
         a = self.myAgent.getAID()
@@ -163,6 +169,7 @@ class AMS(spade.Behaviour.OneShotBehaviour):
 #-----------------------------------------------------------------------
 
 
+#agent that contain the critical receptors list
 class ecAgent(spade.Agent.Agent):
     def _setup(self):
         self.ecDB = []
@@ -179,6 +186,7 @@ class ecAgent(spade.Agent.Agent):
         res = self.registerService(dad)
         print aid.getName() + ": service registered -> " + str(res)
 
+#actions that can do emergency coordinator agent
 class ecaActions(spade.Behaviour.Behaviour):
     def _process(self):
         msg = self._receive(block=True)
@@ -221,6 +229,7 @@ class ecaActions(spade.Behaviour.Behaviour):
 #-----------------------------------------------------------------------
 
 
+#agent that contain information about transplants realized on the country
 class hAgent(spade.Agent.Agent):
     def _setup(self):
         self.hDB = []
@@ -237,6 +246,7 @@ class hAgent(spade.Agent.Agent):
         res = self.registerService(dad)
         print aid.getName() + ": service registered -> " + str(res)
 
+#actions that can do historical agent
 class haActions(spade.Behaviour.Behaviour):
     def _process(self):
         msg = self._receive(block=True)
@@ -255,6 +265,7 @@ class haActions(spade.Behaviour.Behaviour):
 #-----------------------------------------------------------------------
 
 
+#agent that represents the national coordinator
 class national(spade.Agent.Agent):
     def _setup(self):
         self.rec = 0
@@ -273,6 +284,7 @@ class national(spade.Agent.Agent):
         res = self.registerService(dad)
         print aid.getName() + ": service registered -> " + str(res)
 
+#behaviour to create a list of possibles receptors
 class patientsList(spade.Behaviour.TimeOutBehaviour):
     def onStart(self):
         print "waiting zones"
@@ -292,6 +304,7 @@ class patientsList(spade.Behaviour.TimeOutBehaviour):
                 self.myAgent.nationalPatients[zname] = zpatients
                 patients += zpatients
         self.myAgent.rec = 0
+        #ONT Protocol
         zPatients = []
         for i in zRanking:
             hzPatients = []
@@ -305,16 +318,19 @@ class patientsList(spade.Behaviour.TimeOutBehaviour):
         self.myAgent.zSender = ""
         self.myAgent.send(msg2)
 
-pl = patientsList(35)
+#variable with the instance of the previous behaviour
+pl = patientsList(12)
 
+#method to instance the previous behaviour
 def startPatientsList():
-    pl = patientsList(35)
+    pl = patientsList(12)
     template = spade.Behaviour.ACLTemplate()
     template.setPerformative("response")
     t = spade.Behaviour.MessageTemplate(template)
     nc.addBehaviour(pl, t)
     print "patientsList Behaviour started"
 
+#rest of actions that can do a national coordinator
 class nationalActions(spade.Behaviour.Behaviour):
     def _process(self):
         msg = self._receive(block=True)
@@ -360,6 +376,7 @@ class RestAgent(spade.Agent.Agent):
         aid = self.getAID()
         print aid.getName() + ": starting"
 
+#behaviour to complete requests
 class petitionCompleted(spade.Behaviour.Behaviour):
     def _process(self):
         msg = self._receive(block=True)
@@ -422,17 +439,21 @@ class RestBehav(spade.Behaviour.Behaviour):
                         msg.setContent("postP-" + str(k) + "-" + self.myAgent.petitions[k][4])
                         self.myAgent.send(msg)
 
+#variable to intance the previous behaviour
 RestBehaviour = RestBehav()
 
+#method to create an instance of the previous behaviour
 def startRestBehaviour():
     RestBehaviour = RestBehav()
     rest.addBehaviour(RestBehaviour, None)
     print "Rest Behaviour started"
 
+#method to delete an instance of the previous behaviour
 def stopRestBehaviour():
     rest.removeBehaviour(RestBehaviour)
     print "Rest Behaviour stopped"
 
+#method to validate data tha receive REST server
 def dataValidation(model, data):
     c = json.loads(data).keys()
     conf = 1
@@ -472,15 +493,19 @@ def informacion():
             abort(500)
     else:
         return """-GET / -> return services list of the platform
--GET /average-> return average temperature in Celsius from diferents city agent sensors
+-GET <zone>/<level> -> return receptor list from emergency coordinator and other zones
+-GET <zone>/country/confimration -> return confirmation of an hospital from diferent zone
+-GET <zone>/0Emergency/confirmation -> return confirmation of an hospital that have the receptor in emergency coordinator
+-PUT /<zone>/hAgent -> update historical agent information
+-POST /<zone>/ecAgent -> add new patient in critical receptors list
 -OPTIONS / -> return list of possible requests from the platform
 """
 
 #GET request route, linked to funcion consult
-#Call Rest agent to get information about the local temperature from some local zones,
-#representated by agents, and get its average
-#request form: [request state, request used, empty string for information to send]
-@app.route('/<string:zone>/<string:level>', methods=['GET'])        #COMPLETAR
+#Call Rest agent to get receptor list from diferents coordination levels
+#Requires organ data input
+#request form: [request state, request used, empty string for information to send, organ data]
+@app.route('/<string:zone>/<string:level>', methods=['GET'])
 def getPatients(zone, level):
     a = ""
     plv = ""
@@ -512,7 +537,11 @@ def getPatients(zone, level):
             startRestBehaviour()
             abort(500)
 
-@app.route('/<string:zone>/country/confirmation', methods=['GET'])        #COMPROVAR
+#GET request route, linked to funcion consult
+#Call Rest agent to get confirmation of an hospital
+#Requires receptor data input
+#request form: [request state, request used, empty string for information to send, receptor data]
+@app.route('/<string:zone>/country/confirmation', methods=['GET'])
 def getConfirmation(zone):
     a = ""
     for i in zone_list:
@@ -539,7 +568,11 @@ def getConfirmation(zone):
             startRestBehaviour()
             abort(500)
 
-@app.route('/<string:zone>/0Emergency/confirmation', methods=['GET'])        #COMPROVAR
+#GET request route, linked to funcion consult
+#Call Rest agent to get confirmation of an hospital with the receptor in critical state
+#Requires receptor data input
+#request form: [request state, request used, empty string for information to send, receptor data]
+@app.route('/<string:zone>/0Emergency/confirmation', methods=['GET'])
 def getECConfirmation(zone):
     a = ""
     for i in zone_list:
@@ -566,7 +599,11 @@ def getECConfirmation(zone):
             startRestBehaviour()
             abort(500)
 
-@app.route('/<string:zone>/hAgent', methods=['PUT'])        #COMPROVAR
+#PUT request route, linked to funcion consult
+#Call Rest agent to update historical agent information
+#Requires transplant data input
+#request form: [request state, request used, empty string for information to send, transplant data]
+@app.route('/<string:zone>/hAgent', methods=['PUT'])
 def putTransplant(zone):
     a = ""
     for i in zone_list:
@@ -593,7 +630,11 @@ def putTransplant(zone):
             startRestBehaviour()
             abort(500)
 
-@app.route('/<string:zone>/ecAgent', methods=['POST'])        #COMPROVAR
+#POST request route, linked to funcion consult
+#Call Rest agent to add new critical receptor to emergency coordinator list
+#Requires patient data input
+#request form: [request state, request used, empty string for information to send, patient data]
+@app.route('/<string:zone>/ecAgent', methods=['POST'])
 def postPatient(zone):
     a = ""
     for i in zone_list:
@@ -685,6 +726,7 @@ if __name__ == "__main__":
         print str(n) + " : " + i
         n += 1
 
+    #create zone representant agents
     for i in zone_list:
         i["agent"] = zoneRepr(i["zone"]+"@"+spadeHost, "secret")
         i["aid"] = i["agent"].getAID().getName()
@@ -697,6 +739,7 @@ if __name__ == "__main__":
 
         i["agent"].start()
 
+    #create national coordinator agent
     nc = national("national@"+spadeHost, "secret")
     nc.addBehaviour(AMS(), None)
 
@@ -705,6 +748,7 @@ if __name__ == "__main__":
     t = spade.Behaviour.MessageTemplate(aclt)
     nc.addBehaviour(nationalActions(), t)
 
+    #create emergency coordinator agent
     eca = ecAgent("emergency@"+spadeHost, "secret")
     eca.addBehaviour(AMS(), None)
 
@@ -713,6 +757,7 @@ if __name__ == "__main__":
     t3 = spade.Behaviour.MessageTemplate(aclt3)
     nc.addBehaviour(ecaActions(), t3)
 
+    #create historical agent
     ha = hAgent("historical@"+spadeHost, "secret")
     ha.addBehaviour(AMS(), None)
 

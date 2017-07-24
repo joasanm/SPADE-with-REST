@@ -32,6 +32,7 @@ app = Flask(__name__)
 #-----------------------------------------------------------------------
 
 
+#agent that represents an hospital
 class hospitalRepr(spade.Agent.Agent):
     def _setup(self):
         aid = self.getAID()
@@ -47,6 +48,7 @@ class hospitalRepr(spade.Agent.Agent):
         res = self.registerService(dad)
         print aid.getName() + ": service registered -> " + str(res)
 
+#method to make external petitions
 class restRequest(spade.Behaviour.OneShotBehaviour):
     def _process(self):
         msg = self._receive(block=True)
@@ -63,31 +65,31 @@ class restRequest(spade.Behaviour.OneShotBehaviour):
         result = ""
         try:
             if content[0] == "getPL":
-                r = requests.get("http://"+rmh+"/patients", data = content[2], timeout = 5) #COMPLETAR/COMPROBAR
+                r = requests.get("http://"+rmh+"/patients", data = content[2], timeout = 5)
                 result = str(r.status_code) + "-" + content[1] + "-" + r.text
             elif content[0] == "getHC":
-                r = requests.get("http://"+rmh+"/confirmation", data = content[2], timeout = 5) #COMPLETAR/COMPROBAR
+                r = requests.get("http://"+rmh+"/confirmation", data = content[2], timeout = 5)
                 result = str(r.status_code) + "-" + content[1] + "-" + r.text
             elif content[0] == "getECP":
-                r = requests.get("http://"+rmh+"/"+rgName+"/0Emergency", data = content[2], timeout = 23) #COMPLETAR/COMPROBAR
+                r = requests.get("http://"+rmh+"/"+rgName+"/0Emergency", data = content[2], timeout = 6)
                 result = str(r.status_code) + "-" + content[1] + "-" + r.text
             elif content[0] == "getZP":
-                r = requests.get("http://"+rmh+"/"+rgName+"/zone", data = content[2], timeout = 13) #COMPLETAR/COMPROBAR
+                r = requests.get("http://"+rmh+"/"+rgName+"/zone", data = content[2], timeout = 10)
                 result = str(r.status_code) + "-" + content[1] + "-" + r.text
             elif content[0] == "getCP":
-                r = requests.get("http://"+rmh+"/"+rgName+"/country", data = content[2], timeout = 23) #COMPLETAR/COMPROBAR
+                r = requests.get("http://"+rmh+"/"+rgName+"/country", data = content[2], timeout = 18)
                 result = str(r.status_code) + "-" + content[1] + "-" + r.text
             elif content[0] == "getZC":
-                r = requests.get("http://"+rmh+"/"+rgName+"/zone/confirmation", data = content[2], timeout = 23) #COMPLETAR/COMPROBAR
+                r = requests.get("http://"+rmh+"/"+rgName+"/zone/confirmation", data = content[2], timeout = 9)
                 result = str(r.status_code) + "-" + content[1] + "-" + r.text
             elif content[0] == "getECC":
-                r = requests.get("http://"+rmh+"/"+rgName+"/0Emergency/confirmation", data = content[2], timeout = 23) #COMPLETAR/COMPROBAR
+                r = requests.get("http://"+rmh+"/"+rgName+"/0Emergency/confirmation", data = content[2], timeout = 6)
                 result = str(r.status_code) + "-" + content[1] + "-" + r.text
             elif content[0] == "putT":
-                r = requests.put("http://"+rmh+"/"+rgName+"/hAgent", data = content[2], timeout = 23) #COMPLETAR/COMPROBAR
+                r = requests.put("http://"+rmh+"/"+rgName+"/hAgent", data = content[2], timeout = 6)
                 result = str(r.status_code) + "-" + content[1] + "-" + r.text
             elif content[0] == "postP":
-                r = requests.post("http://"+rmh+"/"+rgName+"/ecAgent", data = content[2], timeout = 23) #COMPLETAR/COMPROBAR
+                r = requests.post("http://"+rmh+"/"+rgName+"/ecAgent", data = content[2], timeout = 6)
                 result = str(r.status_code) + "-" + content[1] + "-" + r.text
         except requests.exceptions.RequestException:
             print self.myAgent.getAID().getName() + ": ERROR, connection refused"
@@ -105,8 +107,10 @@ class restRequest(spade.Behaviour.OneShotBehaviour):
         msg2.setContent("requestInformation-" + content[0] + "-" + result)
         self.myAgent.send(msg2)
 
+#variable with an instance of make petitions
 rr = restRequest()
 
+#method to create an instance of making petitions
 def startRestRequest(sender):
     rr = restRequest()
     template = spade.Behaviour.ACLTemplate()
@@ -115,6 +119,7 @@ def startRestRequest(sender):
     rest.addBehaviour(rr, t)
     print "restRequest Behaviour started"
 
+#actions that can do an hospital representant agent
 class reprActions(spade.Behaviour.Behaviour):
     def _process(self):
         msg = self._receive(block=True)
@@ -179,6 +184,7 @@ class reprActions(spade.Behaviour.Behaviour):
             startRestRequest(aid)
         self.myAgent.send(msg2)
 
+#behaviour to register an agent in AMS
 class AMS(spade.Behaviour.OneShotBehaviour):
     def _process(self):
         a = self.myAgent.getAID()
@@ -195,6 +201,7 @@ class AMS(spade.Behaviour.OneShotBehaviour):
 #-----------------------------------------------------------------------
 
 
+#agent that represents the region coordinator
 class region(spade.Agent.Agent):
     def _setup(self):
         self.rec = 0
@@ -213,6 +220,7 @@ class region(spade.Agent.Agent):
         res = self.registerService(dad)
         print aid.getName() + ": service registered -> " + str(res)
 
+#behaviour to create a list of possibles receptors
 class patientsList(spade.Behaviour.TimeOutBehaviour):
     def onStart(self):
         print "waiting hospitals"
@@ -236,7 +244,7 @@ class patientsList(spade.Behaviour.TimeOutBehaviour):
         if self.myAgent.hSender == "":
             msg2.setPerformative("complete")
             msg2.addReceiver(spade.AID.aid("rest@"+spadeHost, ["xmpp://rest@"+spadeHost]))
-            msg2.setContent(pid + "-" + json.dumps(patients))#self.myAgent.regionPatients))
+            msg2.setContent(pid + "-" + json.dumps(patients))
         else:
             msg2.setPerformative("hospital")
             msg2.setContent("patientList-" + pid + "-" + json.dumps(patients))
@@ -245,8 +253,10 @@ class patientsList(spade.Behaviour.TimeOutBehaviour):
         self.myAgent.send(msg2)
         print "ENVIO"
 
+#variable with the instance of the previous behaviour
 pl = patientsList(4)
 
+#method to instance the previous behaviour
 def startPatientsList():
     pl = patientsList(4)
     template = spade.Behaviour.ACLTemplate()
@@ -255,6 +265,7 @@ def startPatientsList():
     rg.addBehaviour(pl, t)
     print "patientsList Behaviour started"
 
+#rest of actions that can do a region coordinator
 class regionActions(spade.Behaviour.Behaviour):
     def _process(self):
         msg = self._receive(block=True)
@@ -368,6 +379,7 @@ class RestAgent(spade.Agent.Agent):
         aid = self.getAID()
         print aid.getName() + ": starting"
 
+#behaviour to complete requests
 class petitionCompleted(spade.Behaviour.Behaviour):
     def _process(self):
         msg = self._receive(block=True)
@@ -455,17 +467,21 @@ class RestBehav(spade.Behaviour.Behaviour):
                         msg.setContent("getP-" + str(k) + "-" + self.myAgent.petitions[k][3])
                         self.myAgent.send(msg)
 
+#variable to intance the previous behaviour
 RestBehaviour = RestBehav()
 
+#method to create an instance of the previous behaviour
 def startRestBehaviour():
     RestBehaviour = RestBehav()
     rest.addBehaviour(RestBehaviour, None)
     print "Rest Behaviour started"
 
+#method to delete an instance of the previous behaviour
 def stopRestBehaviour():
     rest.removeBehaviour(RestBehaviour)
     print "Rest Behaviour stopped"
 
+#method to validate data tha receive REST server
 def dataValidation(model, data):
     c = json.loads(data).keys()
     conf = 1
@@ -505,15 +521,21 @@ def informacion():
             abort(500)
     else:
         return """-GET / -> return services list of the platform
--GET /average-> return average temperature in Celsius from diferents city agent sensors
+-GET <hospital>/<level> -> return receptor list from emergency coordinator, region, other regions and other zones
+-GET <hospital>/region/confimration -> return confirmation of an hospital from other city
+-GET <hospital>/0Emergency/confirmation -> return confirmation of an hospital that have the receptor in emergency coordinator
+-GET /confirmation -> return confirmation of an hospital from the region
+-GET /patients -> return receptors list of the diferents hospitals from the region
+-PUT /<hospital>/hAgent -> update historical agent information
+-POST /<hospital>/ecAgent -> add new patient in critical receptors list
 -OPTIONS / -> return list of possible requests from the platform
 """
 
 #GET request route, linked to funcion consult
-#Call Rest agent to get information about the local temperature from some local zones,
-#representated by agents, and get its average
-#request form: [request state, request used, empty string for information to send]
-@app.route('/<string:hospital>/<string:level>', methods=['GET'])        #COMPLETAR
+#Call Rest agent to get receptor list from diferents coordination levels
+#Requires organ data input
+#request form: [request state, request used, empty string for information to send, organ data]
+@app.route('/<string:hospital>/<string:level>', methods=['GET'])
 def getPatients(hospital, level):
     a = ""
     plv = ""
@@ -549,7 +571,11 @@ def getPatients(hospital, level):
             startRestBehaviour()
             abort(500)
 
-@app.route('/<string:hospital>/region/confirmation', methods=['GET'])        #COMPROVAR
+#GET request route, linked to funcion consult
+#Call Rest agent to get confirmation of an hospital
+#Requires receptor data input
+#request form: [request state, request used, empty string for information to send, receptor data]
+@app.route('/<string:hospital>/region/confirmation', methods=['GET'])
 def getConfirmation(hospital):
     a = ""
     for i in hospital_list:
@@ -576,7 +602,11 @@ def getConfirmation(hospital):
             startRestBehaviour()
             abort(500)
 
-@app.route('/<string:hospital>/0Emergency/confirmation', methods=['GET'])        #COMPROVAR
+#GET request route, linked to funcion consult
+#Call Rest agent to get confirmation of an hospital with the receptor in critical state
+#Requires receptor data input
+#request form: [request state, request used, empty string for information to send, receptor data]
+@app.route('/<string:hospital>/0Emergency/confirmation', methods=['GET'])
 def getECConfirmation(hospital):
     a = ""
     for i in hospital_list:
@@ -603,7 +633,11 @@ def getECConfirmation(hospital):
             startRestBehaviour()
             abort(500)
 
-@app.route('/confirmation', methods=['GET'])        #COMPROVAR
+#GET request route, linked to funcion consult
+#Call Rest agent to get confirmation of an hospital from the region
+#Requires receptor data input
+#request form: [request state, request used, empty string for information to send, receptor data]
+@app.route('/confirmation', methods=['GET'])
 def getConfirmation2():
     if dataValidation(1, request.data) == 0:
         abort(400)
@@ -626,7 +660,11 @@ def getConfirmation2():
             startRestBehaviour()
             abort(500)
 
-@app.route('/patients', methods=['GET'])        #COMPROVAR
+#GET request route, linked to funcion consult
+#Call Rest agent to get receptor list of diferents hospitals from the region
+#Requires organ data input
+#request form: [request state, request used, empty string for information to send, organ data]
+@app.route('/patients', methods=['GET'])
 def getPatients2():
     if dataValidation(0, request.data) == 0:
         abort(400)
@@ -649,7 +687,11 @@ def getPatients2():
             startRestBehaviour()
             abort(500)
 
-@app.route('/<string:hospital>/hAgent', methods=['PUT'])        #COMPROVAR
+#PUT request route, linked to funcion consult
+#Call Rest agent to update historical agent information
+#Requires transplant data input
+#request form: [request state, request used, empty string for information to send, transplant data]
+@app.route('/<string:hospital>/hAgent', methods=['PUT'])
 def putTransplant(hospital):
     a = ""
     for i in hospital_list:
@@ -676,7 +718,11 @@ def putTransplant(hospital):
             startRestBehaviour()
             abort(500)
 
-@app.route('/<string:hospital>/ecAgent', methods=['POST'])        #COMPROVAR
+#POST request route, linked to funcion consult
+#Call Rest agent to add new critical receptor to emergency coordinator list
+#Requires patient data input
+#request form: [request state, request used, empty string for information to send, patient data]
+@app.route('/<string:hospital>/ecAgent', methods=['POST'])
 def postPatient(hospital):
     a = ""
     for i in hospital_list:
@@ -768,6 +814,7 @@ if __name__ == "__main__":
     for i in hospital_list:
         print "Hospital de "+i["city"]+": " + i["hospital"] + " -> " + i["remoteHost"]
 
+    #create hospital representant agents
     for i in hospital_list:
         i["agent"] = hospitalRepr(i["hospital"]+"@"+spadeHost, "secret")
         i["aid"] = i["agent"].getAID().getName()
@@ -780,6 +827,7 @@ if __name__ == "__main__":
 
         i["agent"].start()
 
+    #create region agent
     rg = region("region@"+spadeHost, "secret")
     rg.addBehaviour(AMS(), None)
 

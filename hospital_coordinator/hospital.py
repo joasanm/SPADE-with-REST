@@ -30,6 +30,7 @@ app = Flask(__name__)
 #-----------------------------------------------------------------------
 
 
+#agent that control hospital database
 class wrapper(spade.Agent.Agent):
     def _setup(self):
         self.patientsDB = []
@@ -47,6 +48,7 @@ class wrapper(spade.Agent.Agent):
         res = self.registerService(dad)
         print aid.getName() + ": service registered -> " + str(res)
 
+#actions that can do wrapper agent
 class wrapperActions(spade.Behaviour.Behaviour):
     def _process(self):
         msg = self._receive(block=True)
@@ -86,6 +88,7 @@ class wrapperActions(spade.Behaviour.Behaviour):
         msg2.setContent(cont[1] + "-GET_Wrapper-" + res)
         self.myAgent.send(msg2)
 
+#baheviour to register an agent in AMS
 class AMS(spade.Behaviour.OneShotBehaviour):
     def _process(self):
         a = self.myAgent.getAID()
@@ -102,6 +105,7 @@ class AMS(spade.Behaviour.OneShotBehaviour):
 #-----------------------------------------------------------------------
 
 
+#agent that can comunicate with user
 class interface(spade.Agent.Agent):
     def _setup(self):
         self.input = 1
@@ -118,6 +122,7 @@ class interface(spade.Agent.Agent):
         res = self.registerService(dad)
         print aid.getName() + ": service registered -> " + str(res)
 
+#extra acctions to add patients in hospital database
 class interfaceActions(spade.Behaviour.OneShotBehaviour):
     def _process(self):
         aid = self.myAgent.getAID().getName()
@@ -132,6 +137,7 @@ class interfaceActions(spade.Behaviour.OneShotBehaviour):
         msg.setContent("interface-0-" + json.dumps(content))
         self.myAgent.send(msg)
 
+#behaviour to show in terminal the hospital actions
 class interfacePrint(spade.Behaviour.Behaviour):
     def _process(self):
         msg = self._receive(block=True)
@@ -146,6 +152,7 @@ class interfacePrint(spade.Behaviour.Behaviour):
         elif content[1] == "GET_CoordinatorReceptor":
             print aid + ": Searching " + content[0] + " receptors"
 
+#behaviour to detect keyboard from user
 class interfaceInput(spade.Behaviour.Behaviour):
     def onStart(self):
         time.sleep(2)
@@ -173,6 +180,7 @@ class interfaceInput(spade.Behaviour.Behaviour):
 #-----------------------------------------------------------------------
 
 
+#agent that coordinate organ transplants and comunicates with REST agent
 class transplantCoordinator(spade.Agent.Agent):
     def _setup(self):
         self.layers = {0 : "0Emergency", 1 : "hospital", 2 : "city", 3 : "region", 4 : "zone", 5 : "country"}
@@ -194,6 +202,7 @@ class transplantCoordinator(spade.Agent.Agent):
         res = self.registerService(dad)
         print aid.getName() + ": service registered -> ", str(res)
 
+#actions that can do transplant coordinator agent
 class coordinatorActions(spade.Behaviour.Behaviour):
     def _process(self):
         msg = self._receive(block=True)
@@ -279,16 +288,16 @@ class coordinatorActions(spade.Behaviour.Behaviour):
                     self.myAgent.patients = []
                     self.myAgent.cityPatients = {}
                     inter.input = 1
-                    #REDIRIGIR RESPOSTA A INTERFICIE
+
                 else:
                     msg2.setPerformative("coordinator")
                     msg2.addReceiver(spade.AID.aid("coordinator@"+spadeHost, ["xmpp://coordinator@"+spadeHost]))
                     msg2.setContent("0-SMART_Protocol")
             elif content[0] == "3":
-                #rebre informacio de HA (analitzar casos)
+
                 pass
             elif content[0] == "4":
-                #rebre informacio de EC (analitzar casos)
+
                 pass
         elif content[1] == "New_Search":
             self.myAgent.requestLayer += 1
@@ -352,6 +361,7 @@ class restAgent(spade.Agent.Agent):
         aid = self.getAID()
         print aid.getName() + ": starting"
 
+#behaviour to make external petitions
 class makeRequest(spade.Behaviour.Behaviour):
     def _process(self):
         msg = self._receive(block=True)
@@ -362,8 +372,8 @@ class makeRequest(spade.Behaviour.Behaviour):
         try:
             if content[0] == "0Emergency":
                 r = requests.get("http://"+remoteHost+"/"+hospital+"/0Emergency", data=content[1])
-                result = "{}"#r.text
-                status = "200"#str(r.status_code)
+                result = r.text
+                status = str(r.status_code)
             elif content[0] == "city":
                 cPatients = []
                 for i in cityHospitals:
@@ -459,15 +469,18 @@ class restBehav(spade.Behaviour.Behaviour):
                     elif self.myAgent.petitions[k][1]=="GET_confirmation":
                         self.myAgent.petitions[k][2] = str(random.randint(0,1))
                         self.myAgent.petitions[k][0] = 2
-                        #CORREGIR CONFIRMACIO
 
+
+#variable to intance the previous behaviour
 RestBehaviour = restBehav()
 
+#method to create an instance of the previous behaviour
 def startRestBehaviour():
     RestBehaviour = restBehav()
     rest.addBehaviour(RestBehaviour, None)
     print "Rest Behaviour started"
 
+#method to delete an instance of the previous behaviour
 def stopRestBehaviour():
     rest.removeBehaviour(RestBehaviour)
     print "Rest Behaviour stopped"
@@ -500,10 +513,15 @@ def information():
             abort(500)
     else:
         return """-GET / -> return services list of the platform
--GET /average-> return average temperature in Celsius from diferents local agent sensors
+-GET /confirmation -> return confirmation of do organ transplant to a patient from the hospital
+-GET /patients -> return receptors list from hospitals that are compatible with organ information sended
 -OPTIONS / -> return list of possible requests from the platform
 """
 
+#GET request route, linked to funcion consult
+#Call Rest agent to get receptor list of the hospital
+#Requires organ data input
+#request form: [request state, request used, empty string for information to send, organ data]
 @app.route("/patients", methods=["GET"])
 def getPatients():
     idp=rest.id
@@ -524,6 +542,10 @@ def getPatients():
         startRestBehaviour()
         abort(500)
 
+#GET request route, linked to funcion consult
+#Call Rest agent to get confirmation of the hospital
+#Requires receptor data input
+#request form: [request state, request used, empty string for information to send, receptor data]
 @app.route("/confirmation", methods=["GET"])
 def getConfirmation():
     idp=rest.id
@@ -613,7 +635,6 @@ if __name__ == "__main__":
     tc = transplantCoordinator("coordinator@"+spadeHost, "secret")
     rest = restAgent("rest@"+spadeHost, "secret")
 
-
     wr.addBehaviour(AMS(), None)
     aclt = spade.Behaviour.ACLTemplate()
     aclt.setPerformative("wrapper")
@@ -644,7 +665,6 @@ if __name__ == "__main__":
     rest.addBehaviour(makeRequest(), t5)
     rest.addBehaviour(RestBehaviour, None)
 
-
     wr.start()
     inter.start()
     tc.start()
@@ -652,6 +672,7 @@ if __name__ == "__main__":
 
     inter.addBehaviour(interfaceInput(), None)
 
+    #execute Rest system
     r = restHost.split(":")
     app.run(host = r[0], port = r[1])
 
